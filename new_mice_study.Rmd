@@ -1,0 +1,112 @@
+---
+title: "phylogenize.v2.prep"
+output: html_document
+date: "2024-08-02"
+---
+
+```{r setup, include=FALSE}
+library(Maaslin2)
+library(ANCOMBC)
+library(ape)
+library(Matrix)
+library(phylolm)
+library(ALDEx2)
+library(broom)
+library(dplyr)
+library(tidyverse)
+library(devtools)
+library(phyloseq)
+library(readxl)
+library(ashr)
+library(janitor)
+library(ALDEx2)
+
+#~~~~~Intermittent fasting:
+#import metadata:
+mice_study_IF_metadata <- read.delim("~/Downloads/mice_study_IF_metadata.txt")
+gtdb_214.taxonomy <- read.csv("~/Desktop/gtdb_214-taxonomy.csv") %>% distinct(species, .keep_all = TRUE)
+
+bracken_file_if_1 <-list.files(path="~/Desktop/mice_study_IF/bracken")
+bracken_file_if_2 <-list.files(path="~/Desktop/mice_study_IF/bracken(1)")
+
+bracken_data_if_1<- map(bracken_file_if_1, ~ { read_tsv(file.path("~/Desktop/mice_study_IF/bracken", .), show_col_types=FALSE) })
+bracken_data_if_2<- map(bracken_file_if_2, ~ { read_tsv(file.path("~/Desktop/mice_study_IF/bracken(1)", .), show_col_types=FALSE) })
+
+bracken_sample_if_1 <-gsub("\\.bracken","", bracken_file_if_1)
+bracken_sample_if_2<-gsub("\\.bracken","", bracken_file_if_2)
+
+bracken_data_newcol_if_1 <- map2(bracken_data_if_1, bracken_sample_if_1, ~ { mutate(.x, sample = .y)})
+bracken_data_newcol_if_2=map2(bracken_data_if_2, bracken_sample_if_2, ~ { mutate(.x, sample = .y)})
+
+bracken_data_tidy_if_1=bind_rows(bracken_data_newcol_if_1) 
+bracken_data_tidy_if_2=bind_rows(bracken_data_newcol_if_2)
+bracken_data_tidy_if=rbind(bracken_data_tidy_if_1,bracken_data_tidy_if_2)
+
+bracken_wide_if <- pivot_wider(bracken_data_tidy_if, names_from=sample, values_from=fraction_total_reads, id_cols=name, values_fill = 0) 
+bracken_wide_count_if <- pivot_wider(bracken_data_tidy_if, names_from=sample, values_from=new_est_reads, id_cols=name, values_fill = 0)
+
+#prepare count table for phylogenize-v2:(if run on apps)
+bracken_wide_count_if$name<-gsub("^.{0,3}", "", bracken_wide_count_if$name)
+count.tbl_if=bracken_wide_count_if %>% left_join(gtdb_214.taxonomy, by=c("name"="species")) #this is concerning so maybe stop...?
+
+
+
+
+#prepare metadata tbl 
+if.control=filter(mice_study_IF_metadata, grepl("ad libitium|Ad Libitum",sample_title)) %>% mutate(group="control") %>% select(run_accession,group) 
+if.test=filter(mice_study_IF_metadata, !grepl("ad libitium|Ad Libitum",sample_title)) %>% mutate(group="test") %>% select(run_accession,group) 
+metadata.tbl_if=rbind(if.control,if.test) %>% rename("sample"="run_accession")
+
+#ancombc
+ancom.count_if=bracken_wide_count_if %>% column_to_rownames("name") %>% as.matrix(.)
+ancom.sample_if=rbind(if.control,if.test) %>% column_to_rownames("run_accession")
+sample_phyloseq_if=sample_data(ancom.sample_if)
+count_phyloseq_if=otu_table(ancom.count_if, taxa_are_rows = T)
+phyloseq_if=phyloseq(count_phyloseq_if,sample_phyloseq_if)
+
+ancombc_if=ancombc2(phyloseq_if, assay_name = "count", tax_level = NULL,
+                  fix_formula = "group", rand_formula = NULL,
+                  p_adj_method = "holm", pseudo_sens = TRUE,
+                  prv_cut = 0.10, lib_cut = 1000, s0_perc = 0.05,
+                  group = "group", struc_zero = FALSE, neg_lb = FALSE,
+                  alpha = 0.05, n_cl = 2, verbose = TRUE,
+                  global = TRUE, pairwise = TRUE, 
+                  dunnet = FALSE, trend  = FALSE,
+                  iter_control = list(tol = 1e-5, max_iter = 20, 
+                                      verbose = FALSE),
+                  em_control = list(tol = 1e-5, max_iter = 100),
+                  lme_control = NULL, 
+                  mdfdr_control = list(fwer_ctrl_method = "holm", B = 100), 
+                  trend_control = NULL)
+output_if=ancombc_if$res
+write.csv(output_if, "~/Desktop/mice_study_IF/res_output.if.csv")
+output_if=read.csv("~/Desktop/mice_study_IF/res_output.if.csv") %>% select(-X)
+
+#maaslin 2:
+masslin.count_if=bracken_wide_count_if %>% t() %>% data.frame %>% row_to_names(row_number=1)
+masslin.count_if_fix=as.data.frame(sapply(masslin.count_if, as.numeric))
+rownames(masslin.count_if_fix)<-rownames(masslin.count_if)
+
+masslin.md_if=metadata.tbl_if %>% column_to_rownames(var="sample")
+
+masslin_if=Maaslin2(
+  input_data = masslin.count_if_fix,
+  input_metadata = masslin.md_if,
+  output="~/Desktop/masslin_out_if",
+  fixed_effects = c("group")
+) #all results in the output folders, no rerun
+
+#significant results for both masslin2 and ancombc2: (p<0.05)
+significant_masslin_if <- read.delim("~/Desktop/masslin_out_if/significant_results.tsv")
+
+significant_ancom_if=output_if %>% filter(p_grouptest <0.05) %>% arrange(p_grouptest) 
+
+
+#ashr:
+
+
+
+
+
+```
+
