@@ -103,6 +103,38 @@ significant_ancom_if=output_if %>% filter(p_grouptest <0.05) %>% arrange(p_group
 
 
 #ashr:
+#~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~MetaPhlAn4:(MP)
+#import md datasets :
+mice_study_MP_metadata <- read_excel("~/Desktop/md_mice.study_metaphlan4.xlsx") %>% filter(study_name=="CM_mice_1") %>% select(sample_id,diet_type)
+metaphlan4_supplement <- read.delim("~/Downloads/metaphlan4_supplement.txt") %>% select(sample_title, run_accession)
+metadata_MP=mice_study_MP_metadata %>% inner_join(metaphlan4_supplement, by=c("sample_id"="sample_title")) %>% select(-sample_id)
+
+#import bracken outputs:
+bracken_file_mp <-list.files(path="~/Downloads/bracken_metaphlan4")
+bracken_data_mp <-map(bracken_file_mp, ~ { read_tsv(file.path("~/Downloads/bracken_metaphlan4", .), show_col_types=FALSE) })
+bracken_sample_mp<-gsub("\\.bracken","", bracken_file_mp)
+bracken_data_newcol_mp <- map2(bracken_data_mp, bracken_sample_mp, ~ { mutate(.x, sample = .y)})
+bracken_data_tidy_mp=bind_rows(bracken_data_newcol_mp) 
+bracken_wide_mp <- pivot_wider(bracken_data_tidy_mp, names_from=sample, values_from=fraction_total_reads, id_cols=name, values_fill = 0) 
+bracken_wide_count_mp <- pivot_wider(bracken_data_tidy_mp, names_from=sample, values_from=new_est_reads, id_cols=name, values_fill = 0)
+
+#make phylogenize input:
+metadata_mp_phylogenize=metadata_MP %>% filter(run_accession %in% colnames(bracken_wide_count_mp[,-1])) %>% mutate(dataset="mice_study_mp") %>% rename("sampleid"="run_accession", "env"="diet_type")
+write.table(metadata_mp_phylogenize, file = "metadata_mp_phylogenize.tab", sep = "\t", row.names = FALSE, col.names = TRUE, quote = FALSE)
+
+bracken_wide_count_mp$name<-gsub("^.{0,3}", "", bracken_wide_count_mp$name)
+count_mp_phylogenize=bracken_wide_count_mp %>% left_join(gtdb_214.taxonomy, by=c("name"="species")) %>% select(cluster, contains(c("ERR"))) %>% rename("speciesid"="cluster") %>% na.omit()
+write.table(count_mp_phylogenize, file = "count_mp_phylogenize.tab", sep = "\t", row.names = FALSE, col.names = TRUE, quote = FALSE)
+#~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~TaraOceans
+#import bracken outputs:
+bracken_file_tara <-list.files(path="~/Downloads/bracken_tara")
+bracken_data_tara <-map(bracken_file_tara, ~ { read_tsv(file.path("~/Downloads/bracken_tara", .), show_col_types=FALSE) })
+bracken_sample_tara<-gsub("\\.bracken","", bracken_file_tara)
+bracken_data_newcol_tara <- map2(bracken_data_tara, bracken_sample_tara, ~ { mutate(.x, sample = .y)})
+bracken_data_tidy_tara=bind_rows(bracken_data_newcol_tara) 
+bracken_wide_tara <- pivot_wider(bracken_data_tidy_tara, names_from=sample, values_from=fraction_total_reads, id_cols=name, values_fill = 0) 
+bracken_wide_count_tara <- pivot_wider(bracken_data_tidy_tara, names_from=sample, values_from=new_est_reads, id_cols=name, values_fill = 0)
+
 
 
 
