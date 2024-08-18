@@ -47,10 +47,7 @@ bracken_wide_count_if <- pivot_wider(bracken_data_tidy_if, names_from=sample, va
 
 #prepare count table for phylogenize-v2:(if run on apps)
 bracken_wide_count_if$name<-gsub("^.{0,3}", "", bracken_wide_count_if$name)
-count.tbl_if=bracken_wide_count_if %>% left_join(gtdb_214.taxonomy, by=c("name"="species")) #this is concerning so maybe stop...?
-
-
-
+count.tbl_if=bracken_wide_count_if %>% left_join(gtdb_214.taxonomy, by=c("name"="species")) %>% na.omit()
 
 #prepare metadata tbl 
 if.control=filter(mice_study_IF_metadata, grepl("ad libitium|Ad Libitum",sample_title)) %>% mutate(group="control") %>% select(run_accession,group) 
